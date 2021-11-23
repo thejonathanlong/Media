@@ -21,6 +21,7 @@ public class RecordingController: NSObject, ObservableObject {
         do {
             let recorder = try AVAudioRecorder(url: recordingURL, settings: recordingSettings)
             recorder.delegate = self
+            requestMicrophoneAccessIfNeeded()
             return recorder
         } catch let e {
             statePublisher.send(completion: .failure(e))
@@ -36,6 +37,7 @@ public class RecordingController: NSObject, ObservableObject {
     
     public enum RecordingError: Error {
         case badURL
+        case microphoneAccessDenied
         
         public static func ~= (lhs: Self, rhs: Error) -> Bool {
             guard let selfError = rhs as? Self else { return false }
@@ -99,6 +101,24 @@ private extension RecordingController {
         currentPair.end = audioRecorder?.currentTime ?? .infinity
         timeIntervalPairs.append(currentPair)
         currentPair = (.infinity, .infinity)
+    }
+    
+    func requestMicrophoneAccessIfNeeded() {
+        switch audioSession.recordPermission {
+            case .denied:
+                statePublisher.send(completion: .failure(RecordingError.microphoneAccessDenied))
+                
+            case .undetermined:
+                audioSession.requestRecordPermission { [weak self] _ in
+                    self?.requestMicrophoneAccessIfNeeded()
+                }
+                
+            case .granted:
+                break
+                
+            @unknown default:
+                break
+        }
     }
 }
 
