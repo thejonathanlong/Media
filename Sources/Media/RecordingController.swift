@@ -32,7 +32,7 @@ public class RecordingController: NSObject, ObservableObject {
     private var currentPair: TimePair = (TimeInterval.infinity, TimeInterval.infinity)
     
     public enum State {
-        case notStarted, started, paused
+        case notStarted, started, paused, notAuthorized
     }
     
     public enum RecordingError: Error {
@@ -47,9 +47,6 @@ public class RecordingController: NSObject, ObservableObject {
     
     public var recordingURL: URL?
     public typealias TimePair = (start: TimeInterval, end: TimeInterval)
-//    @Published public var isRecording = false
-//    public var onError: ((Error) -> Void)?
-//    public var onSuccess: ((Bool) -> Void)?
     public var timeIntervalPairs = [TimePair]()
     public var totalTime: TimeInterval {
         timeIntervalPairs.reduce(0) {
@@ -58,7 +55,6 @@ public class RecordingController: NSObject, ObservableObject {
     }
     
     public var statePublisher: CurrentValueSubject<State, Error> = CurrentValueSubject(.notStarted)
-    
     
     public init(recordingURL: URL? = nil,
           settings: [String: Any] = [
@@ -106,7 +102,7 @@ private extension RecordingController {
     func requestMicrophoneAccessIfNeeded() {
         switch audioSession.recordPermission {
             case .denied:
-                statePublisher.send(completion: .failure(RecordingError.microphoneAccessDenied))
+                statePublisher.send(.notAuthorized)
                 
             case .undetermined:
                 audioSession.requestRecordPermission { [weak self] _ in
