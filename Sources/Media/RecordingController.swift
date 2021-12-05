@@ -64,8 +64,6 @@ public class RecordingController: NSObject, ObservableObject {
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]) {
         self.recordingURL = recordingURL
-//        self.onSuccess = onSuccess
-//        self.onError = onError
         self.recordingSettings = settings
     }
 }
