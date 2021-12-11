@@ -84,6 +84,29 @@ public class Exporter {
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
             assetReader = try AVAssetReader(asset: asset)
             
+            /*
+             // Setup metadata track in order to write metadata samples
+                         CMFormatDescriptionRef metadataFormatDescription = NULL;
+                         NSArray *specs = @[
+                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCircleCenterCoordinateIdentifier,
+                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_PointF32},
+                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCircleRadiusIdentifier,
+                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_Float64},
+                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCommentFieldIdentifier,
+                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_UTF8}];
+                         
+                         
+                         OSStatus err = CMMetadataFormatDescriptionCreateWithMetadataSpecifications(kCFAllocatorDefault, kCMMetadataFormatType_Boxed, (__bridge CFArrayRef)specs, &metadataFormatDescription);
+                         if (!err)
+                         {
+                             AVAssetWriterInput *assetWriterMetadataIn = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeMetadata outputSettings:nil sourceFormatHint:metadataFormatDescription];
+                             AVAssetWriterInputMetadataAdaptor *assetWriterMetadataAdaptor = [AVAssetWriterInputMetadataAdaptor assetWriterInputMetadataAdaptorWithAssetWriterInput:assetWriterMetadataIn];
+                             assetWriterMetadataIn.expectsMediaDataInRealTime = YES;
+             */
+            
+            let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
+            let metadataInput = AVAssetWriterInput(mediaType: <#T##AVMediaType#>, outputSettings: <#T##[String : Any]?#>)
+            let timedMetadataInput = AVAssetWriterInputMetadataAdaptor(assetWriterInput: <#T##AVAssetWriterInput#>)
             let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
             let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
             let pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0)) }
@@ -177,4 +200,18 @@ fileprivate class PairExporter {
         }
     }
     
+}
+
+//MARK: - TimedMetadataProvider
+class TimedMetadataProvider {
+    let timedMetadataGroups: [AVTimedMetadataGroup]
+    lazy var iterator = timedMetadataGroups.makeIterator()
+    
+    init(timedMetadataGroups: [AVTimedMetadataGroup]) {
+        self.timedMetadataGroups = timedMetadataGroups
+    }
+    
+    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
+        iterator.next()
+    }
 }
