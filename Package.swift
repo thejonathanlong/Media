@@ -26,6 +26,7 @@ let package = Package(
             dependencies: [Target.Dependency(stringLiteral: "SwiftUIFoundation")]),
         .testTarget(
             name: "MediaTests",
-            dependencies: ["Media"]),
+            dependencies: ["Media"],
+            resources: [.process("testaudio.m4a"), .process("testmovie.mov")]),
     ]
 )

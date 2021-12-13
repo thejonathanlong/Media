@@ -44,24 +44,8 @@ public class Exporter {
     /// The outputURL for the exported movie
     public let outputURL: URL
     
-    /// Holds the state of the exporter.
-    public lazy var statePublisher = CurrentValueSubject<State, Error>(state)
-    
     //MARK: - Private
-    private var state = State.unknown {
-        didSet {
-            switch state {
-                case .finished:
-                    statePublisher.send(completion: .finished)
-                
-                case .failed(let error):
-                    statePublisher.send(completion: .failure(error))
-                
-                default:
-                    statePublisher.send(state)
-            }
-        }
-    }
+    public var state = State.unknown
     
     private var assetWriter: AVAssetWriter?
     
@@ -69,18 +53,25 @@ public class Exporter {
     
     private let queue = DispatchQueue(label: "com.Media.ExporterQ")
     
+    let dispatchGroup = DispatchGroup()
+    
     private let fileType: AVFileType
     
+    lazy var startIfNeeded: Int = {
+        assetWriter?.startSession(atSourceTime: .zero)
+        return Int.max
+    }()
     
     //MARK: - init
-    public init?(outputURL: URL,
+    public init(outputURL: URL,
                  fileType: AVFileType = .mov) {
         self.outputURL = outputURL
         self.fileType = fileType
     }
     
-    func export(tracks: [AVAssetTrack], with timedMetadata: [AVTimedMetadataGroup], from asset: AVAsset) {
+    func export(tracks: [AVAssetTrack], with timedMetadata: [AVTimedMetadataGroup], from asset: AVAsset) async {
         do {
+            
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
             assetReader = try AVAssetReader(asset: asset)
             
@@ -104,57 +95,49 @@ public class Exporter {
                              assetWriterMetadataIn.expectsMediaDataInRealTime = YES;
              */
             
-            let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
-            let metadataInput = AVAssetWriterInput(mediaType: <#T##AVMediaType#>, outputSettings: <#T##[String : Any]?#>)
-            let timedMetadataInput = AVAssetWriterInputMetadataAdaptor(assetWriterInput: <#T##AVAssetWriterInput#>)
+//            let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
+//            let metadataInput = AVAssetWriterInput(mediaType: <#T##AVMediaType#>, outputSettings: <#T##[String : Any]?#>)
+//            let timedMetadataInput = AVAssetWriterInputMetadataAdaptor(assetWriterInput: <#T##AVAssetWriterInput#>)
             let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
             let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
-            let pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0)) }
+            let pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0), queue: queue) }
             
             inputs.forEach { assetWriter?.add($0 )}
             outputs.forEach { assetReader?.add($0) }
             
-            let dispatchGroup = DispatchGroup()
+            assetReader?.startReading()
+            assetWriter?.startWriting()
+//            queue.async {
+//                self.assetWriter?.startSession(atSourceTime: .zero)
+//            }
             
-            pairExporters.forEach {
-                dispatchGroup.enter()
-                $0.setupDataPipe {
-                    dispatchGroup.leave()
+            
+            self.state = .exporting
+            for pairExporter in pairExporters {
+                await pairExporter.setupDataPipe {
+                    _ = startIfNeeded
                 }
             }
             
-            dispatchGroup.notify(queue: queue) { [weak self] in
-                guard let self = self,
-                      let assetReader = self.assetReader,
-                      let assetWriter = self.assetWriter
-                else { return }
-                
-                if assetWriter.status != .failed && assetReader.status == .failed {
-                    dispatchGroup.enter()
-                    assetWriter.finishWriting {
-                        switch assetWriter.status {
-                            case .failed:
-                                self.state = .failed(assetWriter.error ?? ExporterError.unknown)
-                                
-                            case .cancelled:
-                                self.state = .cancelled
-                                
-                            case .completed:
-                                self.state = .finished
-                            
-                            default:
-                                break
-                        }
-                        
-                        dispatchGroup.leave()
-                    }
+            if assetWriter?.status != .failed && assetReader?.status != .failed {
+                await assetWriter?.finishWriting()
+                switch assetWriter?.status {
+                case .failed:
+                    self.state = .failed(assetWriter?.error ?? ExporterError.unknown)
                     
-                    dispatchGroup.wait()
-                } else if let assetWriterError = assetWriter.error {
-                    self.state = .failed(assetWriterError)
-                } else if let assetReaderError = assetReader.error {
-                    self.state = .failed(assetReaderError)
+                case .cancelled:
+                    self.state = .cancelled
+                    
+                case .completed:
+                    self.state = .finished
+                    
+                default:
+                    break
                 }
+            } else if let assetWriterError = assetWriter?.error {
+                self.state = .failed(assetWriterError)
+            } else if let assetReaderError = assetReader?.error {
+                self.state = .failed(assetReaderError)
             }
         } catch let e {
             state = .failed(e)
@@ -168,15 +151,18 @@ fileprivate class PairExporter {
     let queue: DispatchQueue
     var finished = false
     
-    fileprivate init(pair: Exporter.IOPair) {
+    fileprivate init(pair: Exporter.IOPair, queue: DispatchQueue) {
         self.pair = pair
-        self.queue = DispatchQueue(label: "com.Media.Exporter.PairExporterQueue-\(UUID())")
+        self.queue = queue
+//        self.queue = DispatchQueue(label: "com.Media.Exporter.PairExporterQueue-\(UUID())")
     }
     
-    fileprivate func setupDataPipe(completion: @escaping () -> Void) {
+    fileprivate func setupDataPipe(startIfNeeded: () -> Void) async {
         
         let input = pair.input
         let output = pair.output
+        
+        startIfNeeded()
         
         input.requestMediaDataWhenReady(on: self.queue) { [weak self] in
             guard let self = self,
@@ -187,7 +173,7 @@ fileprivate class PairExporter {
             while input.isReadyForMoreMediaData && !self.finished {
                 guard let sampleBuffer = output.copyNextSampleBuffer() else {
                     self.finished = true
-                    return
+                    break
                 }
                 let success = input.append(sampleBuffer)
                 self.finished = !success
@@ -195,7 +181,6 @@ fileprivate class PairExporter {
             
             if self.finished {
                 input.markAsFinished()
-                completion()
             }
         }
     }
