@@ -57,11 +57,6 @@ public class Exporter {
     
     private let fileType: AVFileType
     
-    lazy var startIfNeeded: Int = {
-        assetWriter?.startSession(atSourceTime: .zero)
-        return Int.max
-    }()
-    
     //MARK: - init
     public init(outputURL: URL,
                  fileType: AVFileType = .mov) {
@@ -107,40 +102,45 @@ public class Exporter {
             
             assetReader?.startReading()
             assetWriter?.startWriting()
-//            queue.async {
-//                self.assetWriter?.startSession(atSourceTime: .zero)
-//            }
-            
+            self.assetWriter?.startSession(atSourceTime: .zero)
             
             self.state = .exporting
             for pairExporter in pairExporters {
-                await pairExporter.setupDataPipe {
-                    _ = startIfNeeded
+                dispatchGroup.enter()
+                await pairExporter.setupDataPipe { [weak self] in
+                    self?.dispatchGroup.leave()
                 }
             }
             
-            if assetWriter?.status != .failed && assetReader?.status != .failed {
-                await assetWriter?.finishWriting()
-                switch assetWriter?.status {
-                case .failed:
-                    self.state = .failed(assetWriter?.error ?? ExporterError.unknown)
-                    
-                case .cancelled:
-                    self.state = .cancelled
-                    
-                case .completed:
-                    self.state = .finished
-                    
-                default:
-                    break
-                }
-            } else if let assetWriterError = assetWriter?.error {
-                self.state = .failed(assetWriterError)
-            } else if let assetReaderError = assetReader?.error {
-                self.state = .failed(assetReaderError)
-            }
+            dispatchGroup.wait()
+            
+            try await finishWriting()
+            
         } catch let e {
             state = .failed(e)
+        }
+    }
+    
+    private func finishWriting() async throws {
+        if assetWriter?.status != .failed && assetReader?.status != .failed {
+            await assetWriter?.finishWriting()
+            switch assetWriter?.status {
+            case .failed:
+                throw assetWriter?.error ?? ExporterError.unknown
+                
+            case .cancelled:
+                self.state = .cancelled
+                
+            case .completed:
+                self.state = .finished
+                
+            default:
+                break
+            }
+        } else if let assetWriterError = assetWriter?.error {
+            throw assetWriterError
+        } else if let assetReaderError = assetReader?.error {
+            throw assetReaderError
         }
     }
 }
@@ -154,15 +154,11 @@ fileprivate class PairExporter {
     fileprivate init(pair: Exporter.IOPair, queue: DispatchQueue) {
         self.pair = pair
         self.queue = queue
-//        self.queue = DispatchQueue(label: "com.Media.Exporter.PairExporterQueue-\(UUID())")
     }
     
-    fileprivate func setupDataPipe(startIfNeeded: () -> Void) async {
-        
+    fileprivate func setupDataPipe(completion: @escaping () -> Void) async {
         let input = pair.input
         let output = pair.output
-        
-        startIfNeeded()
         
         input.requestMediaDataWhenReady(on: self.queue) { [weak self] in
             guard let self = self,
@@ -181,10 +177,10 @@ fileprivate class PairExporter {
             
             if self.finished {
                 input.markAsFinished()
+                completion()
             }
         }
     }
-    
 }
 
 //MARK: - TimedMetadataProvider
