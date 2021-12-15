@@ -75,6 +75,35 @@ final class ExporterTests: XCTestCase {
         XCTAssertEqual(exporter.state, .finished)
     }
     
+    func testExportOneTrackWithTimedMetadata() async throws {
+        let outputURL = ExporterTests.exporterOutputDirectoryURL.appendingPathComponent("testExportAudio-\(UUID())").appendingPathExtension("mov")
+        let exporter = Exporter(outputURL: outputURL)
+        
+        XCTAssertEqual(exporter.outputURL, outputURL)
+        let inputURL = try XCTUnwrap(Bundle.module.url(forResource: "testaudio", withExtension: "m4a"))
+        let inputAsset = AVAsset(url: inputURL)
+        
+        let timedMetadata = try createTimedMetadata(startTime: .zero, duration: inputAsset.duration)
+        
+        await exporter.export(tracks: inputAsset.tracks, with: [timedMetadata], from: inputAsset)
+        
+        let outputAsset = AVAsset(url: outputURL)
+        XCTAssertEqual(outputAsset.tracks.count, 2)
+        XCTAssertEqual(Int(outputAsset.duration.seconds), Int(inputAsset.duration.seconds))
+        
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(exporter.state, .finished)
+    }
+    
+    private func createTimedMetadata(startTime: CMTime = .zero, duration: CMTime) throws -> AVTimedMetadataGroup {
+        let metadataItem = AVMutableMetadataItem()
+        metadataItem.identifier = AVMetadataItem.identifier(forKey: "com.mediatests.Image", keySpace: .quickTimeMetadata)
+        let imageURL = try XCTUnwrap(Bundle.module.url(forResource: "testImage", withExtension: "png"))
+        metadataItem.value = try Data(contentsOf: imageURL) as NSData
+        metadataItem.dataType = kCMMetadataBaseDataType_PNG as String
+        
+        return AVTimedMetadataGroup(items: [metadataItem], timeRange: CMTimeRange(start: startTime, duration: duration))
+    }
     
 }
 

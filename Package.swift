@@ -27,6 +27,9 @@ let package = Package(
         .testTarget(
             name: "MediaTests",
             dependencies: ["Media"],
-            resources: [.process("testaudio.m4a"), .process("testmovie.mov")]),
+            resources: [.process("testaudio.m4a"),
+                        .process("testmovie.mov"),
+                        .process("testImage.png")
+                       ]),
     ]
 )
