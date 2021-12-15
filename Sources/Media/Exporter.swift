@@ -10,7 +10,9 @@ import Combine
 import Foundation
 
 protocol SampleProvider {
+    var expectsTimedMetadata: Bool { get }
     func copyNextSampleBuffer() -> CMSampleBuffer?
+    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup?
 }
 
 protocol SampleConsumer {
@@ -20,7 +22,30 @@ protocol SampleConsumer {
     func markAsFinished()
 }
 
-extension AVAssetReaderTrackOutput: SampleProvider {}
+extension SampleConsumer {
+    
+    func append(from output: SampleProvider, with adapter: AVAssetWriterInputMetadataAdaptor?) -> Bool {
+        if adapter != nil && output.expectsTimedMetadata {
+            guard let timedMetadata = output.copyNextTimedMetadataGroup() else { return false }
+            return adapter?.append(timedMetadata) ?? false
+        } else {
+            guard let sampleBuffer = output.copyNextSampleBuffer() else { return false }
+            return append(sampleBuffer)
+        }
+    }
+}
+
+extension SampleProvider {
+    var expectsTimedMetadata: Bool {
+        false
+    }
+}
+
+extension AVAssetReaderTrackOutput: SampleProvider {
+    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
+        nil
+    }
+}
 
 extension AVAssetWriterInput: SampleConsumer { }
 
@@ -38,6 +63,7 @@ public class Exporter {
     internal struct IOPair {
         var output: SampleProvider
         var input: SampleConsumer
+    	var adapter: AVAssetWriterInputMetadataAdaptor?
     }
     
     //MARK: - Public
@@ -70,35 +96,39 @@ public class Exporter {
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
             assetReader = try AVAssetReader(asset: asset)
             
-            /*
-             // Setup metadata track in order to write metadata samples
-                         CMFormatDescriptionRef metadataFormatDescription = NULL;
-                         NSArray *specs = @[
-                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCircleCenterCoordinateIdentifier,
-                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_PointF32},
-                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCircleRadiusIdentifier,
-                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_Float64},
-                                            @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : AAPLTimedAnnotationWriterCommentFieldIdentifier,
-                                              (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_UTF8}];
-                         
-                         
-                         OSStatus err = CMMetadataFormatDescriptionCreateWithMetadataSpecifications(kCFAllocatorDefault, kCMMetadataFormatType_Boxed, (__bridge CFArrayRef)specs, &metadataFormatDescription);
-                         if (!err)
-                         {
-                             AVAssetWriterInput *assetWriterMetadataIn = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeMetadata outputSettings:nil sourceFormatHint:metadataFormatDescription];
-                             AVAssetWriterInputMetadataAdaptor *assetWriterMetadataAdaptor = [AVAssetWriterInputMetadataAdaptor assetWriterInputMetadataAdaptorWithAssetWriterInput:assetWriterMetadataIn];
-                             assetWriterMetadataIn.expectsMediaDataInRealTime = YES;
-             */
-            
-//            let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
-//            let metadataInput = AVAssetWriterInput(mediaType: <#T##AVMediaType#>, outputSettings: <#T##[String : Any]?#>)
-//            let timedMetadataInput = AVAssetWriterInputMetadataAdaptor(assetWriterInput: <#T##AVAssetWriterInput#>)
             let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
             let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
-            let pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0), queue: queue) }
+            
+            var pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0), queue: queue) }
             
             inputs.forEach { assetWriter?.add($0 )}
             outputs.forEach { assetReader?.add($0) }
+            
+            if !timedMetadata.isEmpty {
+                let arrayOfSpecs = timedMetadata
+                    .map { $0.items }
+                    .flatMap { $0 }
+                    .compactMap { item -> [String: AnyObject]? in
+                        guard let identifier = item.identifier,
+                              let dataType = item.dataType else {
+                                  return nil
+                              }
+                        return [
+                            kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier as String : identifier.rawValue as String,
+                            kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType as String : dataType
+                        ] as [String: AnyObject]
+                    }
+                    
+                    let formatDescription = try CMFormatDescription(boxedMetadataSpecifications: arrayOfSpecs)
+                    let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: formatDescription)
+                    let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
+                    let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
+
+                    pairExporters.append(PairExporter(pair: IOPair(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
+                    assetWriter?.add(metadataInput)
+                
+            }
+
             
             assetReader?.startReading()
             assetWriter?.startWriting()
@@ -143,6 +173,10 @@ public class Exporter {
             throw assetReaderError
         }
     }
+    
+    private func addInput(for timedMetadta: [AVTimedMetadataGroup]) {
+        
+    }
 }
 
 //MARK: - PairExporter
@@ -159,6 +193,7 @@ fileprivate class PairExporter {
     fileprivate func setupDataPipe(completion: @escaping () -> Void) async {
         let input = pair.input
         let output = pair.output
+        let adapter = pair.adapter
         
         input.requestMediaDataWhenReady(on: self.queue) { [weak self] in
             guard let self = self,
@@ -167,12 +202,10 @@ fileprivate class PairExporter {
                   }
             
             while input.isReadyForMoreMediaData && !self.finished {
-                guard let sampleBuffer = output.copyNextSampleBuffer() else {
+                if !input.append(from: output, with: adapter) {
                     self.finished = true
                     break
                 }
-                let success = input.append(sampleBuffer)
-                self.finished = !success
             }
             
             if self.finished {
@@ -184,9 +217,16 @@ fileprivate class PairExporter {
 }
 
 //MARK: - TimedMetadataProvider
-class TimedMetadataProvider {
+class TimedMetadataProvider: SampleProvider {
     let timedMetadataGroups: [AVTimedMetadataGroup]
+    
     lazy var iterator = timedMetadataGroups.makeIterator()
+    
+    var outputSettings = [String: Any]()
+    
+    var expectsTimedMetadata: Bool {
+        true
+    }
     
     init(timedMetadataGroups: [AVTimedMetadataGroup]) {
         self.timedMetadataGroups = timedMetadataGroups
@@ -194,5 +234,9 @@ class TimedMetadataProvider {
     
     func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
         iterator.next()
+    }
+    
+    func copyNextSampleBuffer() -> CMSampleBuffer? {
+        nil
     }
 }
