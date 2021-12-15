@@ -9,58 +9,20 @@ import AVFoundation
 import Combine
 import Foundation
 
-protocol SampleProvider {
-    var expectsTimedMetadata: Bool { get }
-    func copyNextSampleBuffer() -> CMSampleBuffer?
-    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup?
-}
-
-protocol SampleConsumer {
-    var isReadyForMoreMediaData: Bool { get }
-    func append(_ sampleBuffer: CMSampleBuffer) -> Bool
-    func requestMediaDataWhenReady(on queue: DispatchQueue, using block: @escaping () -> Void)
-    func markAsFinished()
-}
-
-extension SampleConsumer {
-    
-    func append(from output: SampleProvider, with adapter: AVAssetWriterInputMetadataAdaptor?) -> Bool {
-        if adapter != nil && output.expectsTimedMetadata {
-            guard let timedMetadata = output.copyNextTimedMetadataGroup() else { return false }
-            return adapter?.append(timedMetadata) ?? false
-        } else {
-            guard let sampleBuffer = output.copyNextSampleBuffer() else { return false }
-            return append(sampleBuffer)
-        }
-    }
-}
-
-extension SampleProvider {
-    var expectsTimedMetadata: Bool {
-        false
-    }
-}
-
-extension AVAssetReaderTrackOutput: SampleProvider {
-    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
-        nil
-    }
-}
-
-extension AVAssetWriterInput: SampleConsumer { }
-
 public class Exporter {
     
-    //MARK: - State
+    //MARK: -
     public enum State {
         case unknown, exporting, cancelled, finished, failed(Error)
     }
     
+    //MARK: -
     public enum ExporterError: Error {
         case unknown
     }
     
-    internal struct IOPair {
+    //MARK: -
+    internal struct InputOutputHolder {
         var output: SampleProvider
         var input: SampleConsumer
         var adapter: AVAssetWriterInputMetadataAdaptor?
@@ -90,7 +52,7 @@ public class Exporter {
         self.fileType = fileType
     }
     
-    func export(tracks: [AVAssetTrack], with timedMetadata: [AVTimedMetadataGroup], from asset: AVAsset) async {
+    public func export(tracks: [AVAssetTrack], with timedMetadata: [AVTimedMetadataGroup], from asset: AVAsset) async {
         do {
             
             assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
@@ -99,7 +61,7 @@ public class Exporter {
             let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
             let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
             
-            var pairExporters = Array(zip(inputs, outputs)).map { PairExporter(pair: IOPair(output: $0.1, input: $0.0), queue: queue) }
+            var pairExporters = Array(zip(inputs, outputs)).map { IOExporter(pair: InputOutputHolder(output: $0.1, input: $0.0), queue: queue) }
             
             inputs.forEach { assetWriter?.add($0 )}
             outputs.forEach { assetReader?.add($0) }
@@ -109,7 +71,7 @@ public class Exporter {
                 let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
                 let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
                 
-                pairExporters.append(PairExporter(pair: IOPair(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
+                pairExporters.append(IOExporter(pair: InputOutputHolder(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
                 assetWriter?.add(metadataInput)
             }
             
@@ -134,7 +96,11 @@ public class Exporter {
             state = .failed(e)
         }
     }
-    
+}
+
+
+//MARK: - Private Methods
+private extension Exporter {
     private func finishWriting() async throws {
         if assetWriter?.status != .failed && assetReader?.status != .failed {
             await assetWriter?.finishWriting()
@@ -174,67 +140,5 @@ public class Exporter {
             }
         
         return try CMFormatDescription(boxedMetadataSpecifications: arrayOfSpecs)
-    }
-}
-
-//MARK: - PairExporter
-fileprivate class PairExporter {
-    let pair: Exporter.IOPair
-    let queue: DispatchQueue
-    var finished = false
-    
-    fileprivate init(pair: Exporter.IOPair, queue: DispatchQueue) {
-        self.pair = pair
-        self.queue = queue
-    }
-    
-    fileprivate func setupDataPipe(completion: @escaping () -> Void) async {
-        let input = pair.input
-        let output = pair.output
-        let adapter = pair.adapter
-        
-        input.requestMediaDataWhenReady(on: self.queue) { [weak self] in
-            guard let self = self,
-                  !self.finished else {
-                      return
-                  }
-            
-            while input.isReadyForMoreMediaData && !self.finished {
-                if !input.append(from: output, with: adapter) {
-                    self.finished = true
-                    break
-                }
-            }
-            
-            if self.finished {
-                input.markAsFinished()
-                completion()
-            }
-        }
-    }
-}
-
-//MARK: - TimedMetadataProvider
-class TimedMetadataProvider: SampleProvider {
-    let timedMetadataGroups: [AVTimedMetadataGroup]
-    
-    lazy var iterator = timedMetadataGroups.makeIterator()
-    
-    var outputSettings = [String: Any]()
-    
-    var expectsTimedMetadata: Bool {
-        true
-    }
-    
-    init(timedMetadataGroups: [AVTimedMetadataGroup]) {
-        self.timedMetadataGroups = timedMetadataGroups
-    }
-    
-    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
-        iterator.next()
-    }
-    
-    func copyNextSampleBuffer() -> CMSampleBuffer? {
-        nil
     }
 }
