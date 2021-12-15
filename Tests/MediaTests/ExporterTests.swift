@@ -95,6 +95,27 @@ final class ExporterTests: XCTestCase {
         XCTAssertEqual(exporter.state, .finished)
     }
     
+    func testExportTwoTracksWithTimedMetadata() async throws {
+        let outputURL = ExporterTests.exporterOutputDirectoryURL.appendingPathComponent("testExportTwoTracks-\(UUID())").appendingPathExtension("mov")
+        let exporter = Exporter(outputURL: outputURL)
+        
+        XCTAssertEqual(exporter.outputURL, outputURL)
+        let inputURL = try XCTUnwrap(Bundle.module.url(forResource: "testmovie", withExtension: "mov"))
+        let inputAsset = AVAsset(url: inputURL)
+        
+        let timedMetadata1 = try createTimedMetadata(startTime: .zero, duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
+        let timedMetadata2 = try createTimedMetadata(startTime: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale), duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
+        
+        await exporter.export(tracks: inputAsset.tracks, with: [timedMetadata1, timedMetadata2], from: inputAsset)
+        
+        let outputAsset = AVAsset(url: outputURL)
+        XCTAssertEqual(outputAsset.tracks.count, 3)
+        XCTAssertEqual(Int(outputAsset.duration.seconds), Int(inputAsset.duration.seconds))
+        
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(exporter.state, .finished)
+    }
+    
     private func createTimedMetadata(startTime: CMTime = .zero, duration: CMTime) throws -> AVTimedMetadataGroup {
         let metadataItem = AVMutableMetadataItem()
         metadataItem.identifier = AVMetadataItem.identifier(forKey: "com.mediatests.Image", keySpace: .quickTimeMetadata)
