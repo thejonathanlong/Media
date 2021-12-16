@@ -29,7 +29,8 @@ let package = Package(
             dependencies: ["Media"],
             resources: [.process("testaudio.m4a"),
                         .process("testmovie.mov"),
-                        .process("testImage.png")
+                        .process("testImage.png"),
+                        .process("testMovieWithTimedMetadata.mov")
                        ]),
     ]
 )
