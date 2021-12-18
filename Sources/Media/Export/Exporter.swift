@@ -9,6 +9,9 @@ import AVFoundation
 import Combine
 import Foundation
 
+// Really?
+import UIKit
+
 public class Exporter {
     
     //MARK: -
@@ -19,13 +22,14 @@ public class Exporter {
     //MARK: -
     public enum ExporterError: Error {
         case unknown
+        case startWritingFailed
     }
     
     //MARK: -
     internal struct InputOutputHolder {
         var output: SampleProvider
         var input: SampleConsumer
-        var adapter: AVAssetWriterInputMetadataAdaptor?
+        var adapter: SampleAdaptable?
     }
     
     //MARK: - Public
@@ -52,19 +56,35 @@ public class Exporter {
         self.fileType = fileType
     }
     
-    public func export(tracks: [AVAssetTrack], with timedMetadata: [AVTimedMetadataGroup], from asset: AVAsset) async {
+    public func export(asset: AVAsset,
+                       timedMetadata: [AVTimedMetadataGroup] = [],
+                       imageVideoTrack: ([UIImage], [CMTimeRange]) = ([], [])) async {
         do {
+            let tracks = asset.tracks.filter {
+                if $0.mediaType == .video {
+                    return imageVideoTrack.0.isEmpty
+                } else {
+                    return true
+                }
+            }
+            var pairExporters = try setupReadingAndWriting(for: tracks, of: asset)
             
-            assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
-            assetReader = try AVAssetReader(asset: asset)
-            
-            let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
-            let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
-            
-            var pairExporters = Array(zip(inputs, outputs)).map { IOExporter(pair: InputOutputHolder(output: $0.1, input: $0.0), queue: queue) }
-            
-            inputs.forEach { assetWriter?.add($0 )}
-            outputs.forEach { assetReader?.add($0) }
+            if !imageVideoTrack.0.isEmpty {
+                let pixelBufferProvider = VideoBufferProvider(imaes: imageVideoTrack.0, timeRanges: imageVideoTrack.1)
+                
+                if let firstBuffer = pixelBufferProvider.firstPixelBuffer {
+                    let pixelBufferInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil)
+                    
+                    let sourcePixelBufferAttributesDictionary = [
+                        kCVPixelBufferPixelFormatTypeKey as String : NSNumber(value: kCVPixelFormatType_32ARGB),
+                        kCVPixelBufferWidthKey as String: CVPixelBufferGetWidth(firstBuffer),
+                        kCVPixelBufferHeightKey as String: CVPixelBufferGetHeight(firstBuffer)] as [String : Any]
+                    let pixelBufferAdapter = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: pixelBufferInput, sourcePixelBufferAttributes: sourcePixelBufferAttributesDictionary)
+                    
+                    pairExporters.append(IOExporter(pair: InputOutputHolder(output: pixelBufferProvider, input: pixelBufferInput, adapter: pixelBufferAdapter), queue: queue))
+                    assetWriter?.add(pixelBufferInput)
+                }
+            }
             
             if !timedMetadata.isEmpty {
                 let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try formatDescription(for: timedMetadata))
@@ -77,7 +97,10 @@ public class Exporter {
             
             
             assetReader?.startReading()
-            assetWriter?.startWriting()
+            guard let assetWriter = assetWriter,
+                  assetWriter.startWriting() else {
+                throw ExporterError.startWritingFailed
+            }
             self.assetWriter?.startSession(atSourceTime: .zero)
             
             self.state = .exporting
@@ -101,6 +124,19 @@ public class Exporter {
 
 //MARK: - Private Methods
 private extension Exporter {
+    private func setupReadingAndWriting(for tracks: [AVAssetTrack], of asset: AVAsset) throws -> [IOExporter] {
+        assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
+        assetReader = try AVAssetReader(asset: asset)
+        
+        let inputs = tracks.map { AVAssetWriterInput(mediaType: $0.mediaType, outputSettings: nil) }
+        let outputs = tracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
+                
+        inputs.forEach { assetWriter?.add($0 )}
+        outputs.forEach { assetReader?.add($0) }
+        
+        return Array(zip(inputs, outputs)).map { IOExporter(pair: InputOutputHolder(output: $0.1, input: $0.0, adapter: nil), queue: queue) }
+    }
+    
     private func finishWriting() async throws {
         if assetWriter?.status != .failed && assetReader?.status != .failed {
             await assetWriter?.finishWriting()

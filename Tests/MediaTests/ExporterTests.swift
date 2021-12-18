@@ -47,7 +47,7 @@ final class ExporterTests: XCTestCase {
         let inputURL = try XCTUnwrap(Bundle.module.url(forResource: "testaudio", withExtension: "m4a"))
         let inputAsset = AVAsset(url: inputURL)
         
-        await exporter.export(tracks: inputAsset.tracks, with: [], from: inputAsset)
+        await exporter.export(asset: inputAsset)
         
         let outputAsset = AVAsset(url: outputURL)
         XCTAssertEqual(outputAsset.tracks.count, 1)
@@ -65,7 +65,7 @@ final class ExporterTests: XCTestCase {
         let inputURL = try XCTUnwrap(Bundle.module.url(forResource: "testmovie", withExtension: "mov"))
         let inputAsset = AVAsset(url: inputURL)
         
-        await exporter.export(tracks: inputAsset.tracks, with: [], from: inputAsset)
+        await exporter.export(asset: inputAsset)
         
         let outputAsset = AVAsset(url: outputURL)
         XCTAssertEqual(outputAsset.tracks.count, 2)
@@ -85,7 +85,7 @@ final class ExporterTests: XCTestCase {
         
         let timedMetadata = try createTimedMetadata(startTime: .zero, duration: inputAsset.duration)
         
-        await exporter.export(tracks: inputAsset.tracks, with: [timedMetadata], from: inputAsset)
+        await exporter.export(asset: inputAsset, timedMetadata: [timedMetadata])
         
         let outputAsset = AVAsset(url: outputURL)
         XCTAssertEqual(outputAsset.tracks.count, 2)
@@ -106,7 +106,31 @@ final class ExporterTests: XCTestCase {
         let timedMetadata1 = try createTimedMetadata(startTime: .zero, duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
         let timedMetadata2 = try createTimedMetadata(startTime: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale), duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
         
-        await exporter.export(tracks: inputAsset.tracks, with: [timedMetadata1, timedMetadata2], from: inputAsset)
+        await exporter.export(asset: inputAsset, timedMetadata: [timedMetadata1, timedMetadata2])
+        
+        let outputAsset = AVAsset(url: outputURL)
+        XCTAssertEqual(outputAsset.tracks.count, 3)
+        XCTAssertEqual(Int(outputAsset.duration.seconds), Int(inputAsset.duration.seconds))
+        
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(exporter.state, .finished)
+    }
+    
+    func testExportTwoTracksWithTimedMetadataAndImageVideoTrack() async throws {
+        let outputURL = ExporterTests.exporterOutputDirectoryURL.appendingPathComponent("testExportTwoTracks-\(UUID())").appendingPathExtension("mov")
+        let exporter = Exporter(outputURL: outputURL)
+        
+        XCTAssertEqual(exporter.outputURL, outputURL)
+        let inputURL = try XCTUnwrap(Bundle.module.url(forResource: "testmovie", withExtension: "mov"))
+        let inputAsset = AVAsset(url: inputURL)
+        
+        let timedMetadata1 = try createTimedMetadata(startTime: .zero, duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
+        let timedMetadata2 = try createTimedMetadata(startTime: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale), duration: CMTime(seconds: inputAsset.duration.seconds / 2.0, preferredTimescale: inputAsset.duration.timescale))
+        let imageURL = try XCTUnwrap(Bundle.module.url(forResource: "testImage", withExtension: "png"))
+        let data = try XCTUnwrap(Data(contentsOf: imageURL))
+        let images = [UIImage(data: data)!, UIImage(data: data)!]
+        
+        await exporter.export(asset: inputAsset, timedMetadata: [timedMetadata1, timedMetadata2], imageVideoTrack: (images, [timedMetadata1.timeRange, timedMetadata2.timeRange]))
         
         let outputAsset = AVAsset(url: outputURL)
         XCTAssertEqual(outputAsset.tracks.count, 3)
@@ -146,6 +170,4 @@ extension Exporter.State: Equatable {
             return false
         }
     }
-    
-    
 }

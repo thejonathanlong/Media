@@ -8,16 +8,12 @@
 import AVFoundation
 import Foundation
 
-class TimedMetadataProvider: SampleProvider {
+class TimedMetadataProvider: TimedMetadataSampleProvider {
     let timedMetadataGroups: [AVTimedMetadataGroup]
     
     lazy var iterator = timedMetadataGroups.makeIterator()
     
     var outputSettings = [String: Any]()
-    
-    var expectsTimedMetadata: Bool {
-        true
-    }
     
     init(timedMetadataGroups: [AVTimedMetadataGroup]) {
         self.timedMetadataGroups = timedMetadataGroups
@@ -25,9 +21,5 @@ class TimedMetadataProvider: SampleProvider {
     
     func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
         iterator.next()
-    }
-    
-    func copyNextSampleBuffer() -> CMSampleBuffer? {
-        nil
     }
 }

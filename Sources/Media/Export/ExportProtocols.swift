@@ -7,19 +7,39 @@
 
 import AVFoundation
 import CoreMedia
+import CoreVideo
 import Foundation
 
 //MARK: - SampleProvider
-protocol SampleProvider {
-    var expectsTimedMetadata: Bool { get }
+protocol SampleProvider { }
+
+protocol SampleBufferProvider: SampleProvider {
     func copyNextSampleBuffer() -> CMSampleBuffer?
+}
+
+protocol TimedMetadataSampleProvider: SampleProvider {
     func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup?
 }
 
-extension SampleProvider {
-    var expectsTimedMetadata: Bool {
-        false
-    }
+protocol PixelBufferProvider: SampleProvider {
+    func copyNextPixelBuffer() -> TimedPixelBuffer?
+}
+
+//MARK: -
+protocol SampleAdaptable { }
+
+protocol TimedMetadataAdaptable: SampleAdaptable {
+    func append(_ timedMetadataGroup: AVTimedMetadataGroup) -> Bool
+}
+
+protocol PixelBufferAdaptable: SampleAdaptable {
+    func append(_ pixelBuffer: CVPixelBuffer, withPresentationTime: CMTime) -> Bool
+}
+
+//MARK: - TimedPixelBuffer
+struct TimedPixelBuffer {
+    let pixelBuffer: CVPixelBuffer
+    let time: CMTime
 }
 
 //MARK: - SampleConsumer
@@ -31,22 +51,34 @@ protocol SampleConsumer {
 }
 
 extension SampleConsumer {
-    func append(from output: SampleProvider, with adapter: AVAssetWriterInputMetadataAdaptor?) -> Bool {
-        if adapter != nil && output.expectsTimedMetadata {
-            guard let timedMetadata = output.copyNextTimedMetadataGroup() else { return false }
-            return adapter?.append(timedMetadata) ?? false
-        } else {
-            guard let sampleBuffer = output.copyNextSampleBuffer() else { return false }
-            return append(sampleBuffer)
+    
+    func append(from provider: SampleProvider, with adapter: SampleAdaptable?) -> Bool {
+        switch (provider, adapter) {
+            case (let provider as SampleBufferProvider, _):
+                guard let sampleBuffer = provider.copyNextSampleBuffer() else { return false }
+                return append(sampleBuffer)
+            
+            case (let provider as TimedMetadataProvider, let adapter as TimedMetadataAdaptable):
+                guard let timedMetadata = provider.copyNextTimedMetadataGroup() else { return false }
+                return adapter.append(timedMetadata)
+                
+            case (let provider as PixelBufferProvider, let adapter as PixelBufferAdaptable):
+                guard let timedPixelBuffer = provider.copyNextPixelBuffer() else { return false }
+                return adapter.append(timedPixelBuffer.pixelBuffer, withPresentationTime: timedPixelBuffer.time)
+                
+            default:
+                assertionFailure("This combination of provide and adapter was not handled. Provider: \(provider) adapter: \(String(describing: adapter))")
         }
+        
+        return false
     }
 }
 
 //MARK: AVFoundation Extensions
-extension AVAssetReaderTrackOutput: SampleProvider {
-    func copyNextTimedMetadataGroup() -> AVTimedMetadataGroup? {
-        nil
-    }
-}
+extension AVAssetReaderTrackOutput: SampleBufferProvider { }
 
 extension AVAssetWriterInput: SampleConsumer { }
+
+extension AVAssetWriterInputMetadataAdaptor: TimedMetadataAdaptable { }
+
+extension AVAssetWriterInputPixelBufferAdaptor: PixelBufferAdaptable { }
