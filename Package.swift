@@ -30,7 +30,9 @@ let package = Package(
             resources: [.process("testaudio.m4a"),
                         .process("testmovie.mov"),
                         .process("testImage.png"),
-                        .process("testMovieWithTimedMetadata.mov")
+                        .process("testMovieWithTimedMetadata.mov"),
+                        .process("ModerElectroAcoustics.m4a"),
+                        .process("testMovieWithStringTimedMetadata.mov")
                        ]),
     ]
 )

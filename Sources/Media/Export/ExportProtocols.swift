@@ -73,12 +73,3 @@ extension SampleConsumer {
         return false
     }
 }
-
-//MARK: AVFoundation Extensions
-extension AVAssetReaderTrackOutput: SampleBufferProvider { }
-
-extension AVAssetWriterInput: SampleConsumer { }
-
-extension AVAssetWriterInputMetadataAdaptor: TimedMetadataAdaptable { }
-
-extension AVAssetWriterInputPixelBufferAdaptor: PixelBufferAdaptable { }

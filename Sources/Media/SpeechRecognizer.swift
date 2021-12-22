@@ -23,7 +23,7 @@ public class SpeechRecognizer {
         case recognitionIsRestricted
         case recognitionIsAuthorized
         case recognitionFailed(Error)
-        case completed(TimedUtterance)
+        case completed(TimedStrings)
     }
     
     //MARK: - Public
@@ -36,7 +36,7 @@ public class SpeechRecognizer {
         self.url = url
     }
     
-    public func text(from url: URL) async -> TimedUtterance? {
+    public func generateTimedStrings() async -> TimedStrings? {
         queue.addOperation(requestAuthorizationOperation)
         queue.addOperation(recognitionTaskOperation)
         queue.waitUntilAllOperationsAreFinished()
@@ -109,7 +109,7 @@ public class SpeechRecognizer {
                         .map {
                             $0.formattedString
                         }
-                    let timedUtterance = TimedUtterance(formattedString: formattedStrings, duration: result.speechRecognitionMetadata?.speechDuration ?? 0)
+                    let timedUtterance = TimedStrings(formattedString: formattedStrings, duration: result.speechRecognitionMetadata?.speechDuration ?? 0)
                     self.state = .completed(timedUtterance)
                 
                 default:
@@ -120,7 +120,7 @@ public class SpeechRecognizer {
 }
 
 //MARK: - TimedUtterance
-public struct TimedUtterance {
+public struct TimedStrings {
     let formattedString: [String]
     let duration: TimeInterval
 }

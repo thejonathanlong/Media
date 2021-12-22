@@ -87,7 +87,7 @@ public class Exporter {
             }
             
             if !timedMetadata.isEmpty {
-                let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try formatDescription(for: timedMetadata))
+                let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try CMFormatDescription.formatDescription(for: timedMetadata))
                 let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
                 let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
                 
@@ -158,23 +158,5 @@ private extension Exporter {
         } else if let assetReaderError = assetReader?.error {
             throw assetReaderError
         }
-    }
-    
-    private func formatDescription(for timedMetadata: [AVTimedMetadataGroup]) throws -> CMFormatDescription {
-        let arrayOfSpecs = timedMetadata
-            .map { $0.items }
-            .flatMap { $0 }
-            .compactMap { item -> [String: AnyObject]? in
-                guard let identifier = item.identifier,
-                      let dataType = item.dataType else {
-                          return nil
-                      }
-                return [
-                    kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier as String : identifier.rawValue as String,
-                    kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType as String : dataType
-                ] as [String: AnyObject]
-            }
-        
-        return try CMFormatDescription(boxedMetadataSpecifications: arrayOfSpecs)
     }
 }
