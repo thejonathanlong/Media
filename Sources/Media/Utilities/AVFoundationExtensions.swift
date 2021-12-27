@@ -8,6 +8,10 @@
 import Foundation
 import AVFoundation
 
+#if !os(macOS)
+import UIKit
+#endif
+
 //MARK: - AVAssetReaderTrackOutput Extension
 extension AVAssetReaderTrackOutput: SampleBufferProvider { }
 
@@ -35,6 +39,17 @@ public extension AVTimedMetadataGroup {
             return nil
         }
     }
+    
+    #if !os(macOS)
+    static func timedMetadataGroup(with image: UIImage, timeRange: CMTimeRange, identifier: String) -> AVTimedMetadataGroup {
+            let metadataItem = AVMutableMetadataItem()
+            metadataItem.identifier = AVMetadataItem.identifier(forKey: identifier, keySpace: .quickTimeMetadata)
+            metadataItem.value = image.pngData() as NSData?
+            metadataItem.dataType = kCMMetadataBaseDataType_PNG as String
+            
+            return AVTimedMetadataGroup(items: [metadataItem], timeRange: timeRange)
+    }
+    #endif
     
     static func timedMetadataGroup(with strings: [String], timeRange: CMTimeRange, identifier: String) -> AVTimedMetadataGroup {
         let metadataItem = AVMutableMetadataItem()
