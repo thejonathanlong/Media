@@ -56,9 +56,9 @@ public class Exporter {
         self.fileType = fileType
     }
     
-    public func export(asset: AVAsset,
-                       timedMetadata: [AVTimedMetadataGroup] = [],
-                       imageVideoTrack: ([UIImage], [CMTimeRange]) = ([], [])) async {
+   @discardableResult public func export(asset: AVAsset,
+                       timedMetadata: [[AVTimedMetadataGroup]] = [],
+                       imageVideoTrack: ([UIImage], [CMTimeRange]) = ([], [])) async -> URL? {
         do {
             let tracks = asset.tracks.filter {
                 if $0.mediaType == .video {
@@ -86,10 +86,10 @@ public class Exporter {
                 }
             }
             
-            if !timedMetadata.isEmpty {
-                let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try CMFormatDescription.formatDescription(for: timedMetadata))
+            try timedMetadata.forEach {
+                let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try CMFormatDescription.formatDescription(for: $0))
                 let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
-                let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: timedMetadata)
+                let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: $0)
                 
                 pairExporters.append(IOExporter(pair: InputOutputHolder(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
                 assetWriter?.add(metadataInput)
@@ -115,8 +115,11 @@ public class Exporter {
             
             try await finishWriting()
             
+            return outputURL
+            
         } catch let e {
             state = .failed(e)
+            return nil
         }
     }
 }

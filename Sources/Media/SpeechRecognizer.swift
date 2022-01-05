@@ -121,6 +121,6 @@ public class SpeechRecognizer {
 
 //MARK: - TimedUtterance
 public struct TimedStrings {
-    let formattedString: [String]
-    let duration: TimeInterval
+    public let formattedString: [String]
+    public let duration: TimeInterval
 }
