@@ -86,14 +86,16 @@ public class Exporter {
                 }
             }
             
-            try timedMetadata.forEach {
-                let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try CMFormatDescription.formatDescription(for: $0))
-                let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
-                let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: $0)
-                
-                pairExporters.append(IOExporter(pair: InputOutputHolder(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
-                assetWriter?.add(metadataInput)
-            }
+            try timedMetadata
+                .filter { !$0.isEmpty }
+                .forEach {
+                    let metadataInput = AVAssetWriterInput(mediaType: .metadata, outputSettings: nil, sourceFormatHint: try CMFormatDescription.formatDescription(for: $0))
+                    let timedMetadataAdapter = AVAssetWriterInputMetadataAdaptor(assetWriterInput: metadataInput)
+                    let timedMetadataProvider = TimedMetadataProvider(timedMetadataGroups: $0)
+                    
+                    pairExporters.append(IOExporter(pair: InputOutputHolder(output: timedMetadataProvider, input: metadataInput, adapter: timedMetadataAdapter), queue: queue))
+                    assetWriter?.add(metadataInput)
+                }
             
             
             assetReader?.startReading()
