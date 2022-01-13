@@ -37,7 +37,8 @@ public class RecordingController: NSObject, ObservableObject {
     private var timerCancellable: AnyCancellable?
     
     public enum State {
-        case notStarted, started, paused, notAuthorized
+        case notStarted, paused, notAuthorized
+        case started(TimeInterval)
         case timeUpdated(TimeInterval)
     }
     
@@ -70,9 +71,9 @@ public class RecordingController: NSObject, ObservableObject {
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]) {
-        self.recordingURL = recordingURL
-        self.recordingSettings = settings
-    }
+            self.recordingURL = recordingURL
+            self.recordingSettings = settings
+        }
 }
 
 //MARK: - Public
@@ -80,10 +81,10 @@ public extension RecordingController {
     func startOrResumeRecording() {
         audioRecorder?.record()
         currentPair.start = audioRecorder?.currentTime ?? .infinity
-        statePublisher.send(.started)
+        statePublisher.send(.started(audioRecorder?.currentTime ?? 0.0))
         
         if timerCancellable == nil {
-            timerCancellable = Timer.publish(every: 0.3, tolerance: nil, on: .main, in: .default)
+            timerCancellable = Timer.publish(every: 0.3, tolerance: nil, on: .current, in: .default)
                 .autoconnect()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
@@ -105,6 +106,9 @@ public extension RecordingController {
         updateCurrentEndTime()
         audioRecorder?.stop()
         recordingURL = nil
+        timerCancellable?.cancel()
+        // The delegate isn't called sometimes. Not 100% sure why.
+        statePublisher.send(completion: .finished)
     }
 }
 
