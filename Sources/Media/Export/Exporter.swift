@@ -1,8 +1,6 @@
 //
 //  Exporter.swift
-//  
-//
-//  Created by Jonathan Long on 12/8/21.
+//  Created on 12/8/21.
 //
 
 import AVFoundation

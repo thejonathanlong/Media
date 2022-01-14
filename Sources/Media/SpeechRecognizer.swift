@@ -1,8 +1,6 @@
 //
 //  SpeechRecognizer.swift
-//  
-//
-//  Created by Jonathan Long on 12/20/21.
+//  Created on 12/20/21.
 //
 
 import Foundation

@@ -1,8 +1,6 @@
 //
 //  RecordingController.swift
-//  
-//
-//  Created by Jonathan Long on 11/9/21.
+//  Created on 11/9/21.
 //
 
 import AVFoundation

@@ -1,8 +1,6 @@
 //
 //  PlayerView.swift
-//  
-//
-//  Created by Jonathan Long on 10/28/21.
+//  Created on 10/28/21.
 //
 
 import AVFoundation

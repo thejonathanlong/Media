@@ -1,8 +1,6 @@
 //
 //  VideoBufferProvider.swift
-//  
-//
-//  Created by Jonathan Long on 12/18/21.
+//  Created on 12/18/21.
 //
 
 import CoreMedia

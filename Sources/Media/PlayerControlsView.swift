@@ -1,8 +1,6 @@
 //
 //  PlayerControlsView.swift
-//  
-//
-//  Created by Jonathan Long on 11/3/21.
+//  Created on 11/3/21.
 //
 
 import SwiftUI

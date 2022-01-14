@@ -1,8 +1,6 @@
 //
 //  PlayerLayerView.swift
-//  
-//
-//  Created by Jonathan Long on 11/1/21.
+//  Created on 11/1/21.
 //
 
 import AVFoundation

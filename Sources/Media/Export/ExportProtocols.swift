@@ -1,8 +1,6 @@
 //
 //  ExportProtocols.swift
-//  
-//
-//  Created by Jonathan Long on 12/15/21.
+//  Created on 12/15/21.
 //
 
 import AVFoundation
