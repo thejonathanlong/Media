@@ -13,6 +13,7 @@ public protocol PlayerControlsViewDisplayable: ObservableObject {
     func togglePlayPause()
     func next()
     func previous()
+    func move(to imageIndex: Int)
 }
 
 struct PlayerControlsView<TimeLineViewModel>: View where TimeLineViewModel: PlayerControlsViewDisplayable {
@@ -22,6 +23,7 @@ struct PlayerControlsView<TimeLineViewModel>: View where TimeLineViewModel: Play
         HStack(spacing: 25) {
             controls
             snapshots
+                .frame(maxHeight: 66)
         }
     }
     
@@ -29,6 +31,11 @@ struct PlayerControlsView<TimeLineViewModel>: View where TimeLineViewModel: Play
         HStack {
             ForEach(0..<viewModel.images.count) { index in
                 Image(uiImage: viewModel.images[index])
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .onTapGesture {
+                        viewModel.move(to: index)
+                    }
             }
         }
     }

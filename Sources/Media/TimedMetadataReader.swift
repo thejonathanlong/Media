@@ -6,17 +6,17 @@
 import AVFoundation
 import Foundation
 
-class TimedMetadataReader {
+public class TimedMetadataReader {
 
     let assetReader: AVAssetReader?
     
-    init(asset: AVAsset) {
+    public init(asset: AVAsset) {
         assetReader = try? AVAssetReader(asset: asset)
     }
     
     /// Reads the timed metadata from an asset up front.
     /// - returns: An array of arrays of timedMetadata. Each array corresponds to each track of timedMetadata.
-    func readTimedMetadata() async -> [[AVTimedMetadataGroup]] {
+    public func readTimedMetadata() async -> [[AVTimedMetadataGroup]] {
         guard let timedMetadataTracks = assetReader?.asset.tracks(withMediaType: .metadata) else { return [] }
         
         let trackOutputs = timedMetadataTracks.map { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) }
