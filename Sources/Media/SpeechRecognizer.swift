@@ -87,38 +87,33 @@ public class SpeechRecognizer {
         recognitionTaskOperationDispatchGroup.enter()
         self.speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
-            self.queue.addOperation(self.speechRecognitionRequestFinished(with: result, error: error))
-            recognitionTaskOperationDispatchGroup.leave()
-        }
-        recognitionTaskOperationDispatchGroup.wait()
-    }
     
-    private func speechRecognitionRequestFinished(with result: SFSpeechRecognitionResult?, error: Error?) -> BlockOperation {
-        BlockOperation { [weak self] in
-            guard let self = self else { return }
-            
             switch (error, result) {
                 case (.some(let error), _ ):
                     self.state = .recognitionFailed(error)
+                    recognitionTaskOperationDispatchGroup.leave()
                 
                 case (_, .some(let result)):
-                    let formattedStrings = result
-                        .transcriptions
-                        .map {
-                            $0.formattedString
-                        }
+                    let formattedStrings = result.bestTranscription.formattedString
                     let timedUtterance = TimedStrings(formattedString: formattedStrings, duration: result.speechRecognitionMetadata?.speechDuration ?? 0)
-                    self.state = .completed(timedUtterance)
+                    if result.isFinal {
+                        self.state = .completed(timedUtterance)
+                        recognitionTaskOperationDispatchGroup.leave()
+                    } else {
+                        self.state = .recognitionIsAuthorized
+                    }
                 
                 default:
                     self.state = .recognitionFailed(SpeechRecognizerError.unknown)
+                    recognitionTaskOperationDispatchGroup.leave()
             }
         }
+        recognitionTaskOperationDispatchGroup.wait()
     }
 }
 
 //MARK: - TimedUtterance
 public struct TimedStrings {
-    public let formattedString: [String]
+    public let formattedString: String
     public let duration: TimeInterval
 }
