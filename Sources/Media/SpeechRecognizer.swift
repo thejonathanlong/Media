@@ -85,7 +85,7 @@ public class SpeechRecognizer {
         let request = SFSpeechURLRecognitionRequest(url: self.url)
         let recognitionTaskOperationDispatchGroup = DispatchGroup()
         recognitionTaskOperationDispatchGroup.enter()
-        self.speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
+        let task = self.speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
             guard let self = self else { return }
     
             switch (error, result) {
@@ -109,6 +109,7 @@ public class SpeechRecognizer {
             }
         }
         recognitionTaskOperationDispatchGroup.wait()
+        task?.finish()
     }
 }
 

@@ -17,6 +17,8 @@ public class RecordingController: NSObject, ObservableObject {
             return nil
         }
         do {
+            try audioSession.setCategory(.playAndRecord, mode: .default)
+                try audioSession.setActive(true)
             let recorder = try AVAudioRecorder(url: recordingURL, settings: recordingSettings)
             recorder.delegate = self
             requestMicrophoneAccessIfNeeded()
@@ -43,6 +45,7 @@ public class RecordingController: NSObject, ObservableObject {
     public enum RecordingError: Error {
         case badURL
         case microphoneAccessDenied
+        case startRecordingFailed
         
         public static func ~= (lhs: Self, rhs: Error) -> Bool {
             guard let selfError = rhs as? Self else { return false }
@@ -77,20 +80,26 @@ public class RecordingController: NSObject, ObservableObject {
 //MARK: - Public
 public extension RecordingController {
     func startOrResumeRecording() {
-        audioRecorder?.record()
-        currentPair.start = audioRecorder?.currentTime ?? .infinity
-        statePublisher.send(.started(audioRecorder?.currentTime ?? 0.0))
         
-        if timerCancellable == nil {
-            timerCancellable = Timer.publish(every: 0.3, tolerance: nil, on: .current, in: .default)
-                .autoconnect()
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in
-                    guard let self = self,
-                          let audioRecorder = self.audioRecorder
-                    else { return }
-                    self.statePublisher.send(.timeUpdated(audioRecorder.currentTime))
-                }
+        
+        if let isRecording = audioRecorder?.record(),
+            isRecording {
+            currentPair.start = audioRecorder?.currentTime ?? .infinity
+            statePublisher.send(.started(audioRecorder?.currentTime ?? 0.0))
+            
+            if timerCancellable == nil {
+                timerCancellable = Timer.publish(every: 0.3, tolerance: nil, on: .current, in: .default)
+                    .autoconnect()
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] _ in
+                        guard let self = self,
+                              let audioRecorder = self.audioRecorder
+                        else { return }
+                        self.statePublisher.send(.timeUpdated(audioRecorder.currentTime))
+                    }
+            }
+        } else {
+            statePublisher.send(completion: .failure(RecordingError.startRecordingFailed))
         }
     }
     
