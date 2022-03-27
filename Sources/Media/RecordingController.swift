@@ -117,15 +117,6 @@ public extension RecordingController {
         // The delegate isn't called sometimes. Not 100% sure why.
         statePublisher.send(completion: .finished)
     }
-}
-
-//MARK: - Private
-private extension RecordingController {
-    func updateCurrentEndTime() {
-        currentPair.end = audioRecorder?.currentTime ?? .infinity
-        timeIntervalPairs.append(currentPair)
-        currentPair = (.infinity, .infinity)
-    }
     
     func requestMicrophoneAccessIfNeeded() {
         switch audioSession.recordPermission {
@@ -143,6 +134,15 @@ private extension RecordingController {
             @unknown default:
                 break
         }
+    }
+}
+
+//MARK: - Private
+private extension RecordingController {
+    func updateCurrentEndTime() {
+        currentPair.end = audioRecorder?.currentTime ?? .infinity
+        timeIntervalPairs.append(currentPair)
+        currentPair = (.infinity, .infinity)
     }
 }
 
