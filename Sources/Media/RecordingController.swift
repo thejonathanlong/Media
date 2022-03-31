@@ -28,6 +28,7 @@ public class RecordingController: NSObject, ObservableObject {
             return nil
         }
     }()
+    
     private var audioSession = AVAudioSession.sharedInstance()
     
     private var currentPair: TimePair = (TimeInterval.infinity, TimeInterval.infinity)
@@ -36,10 +37,13 @@ public class RecordingController: NSObject, ObservableObject {
     
     private var timerCancellable: AnyCancellable?
     
+    private var cancellables = Set<AnyCancellable>()
+    
     public enum State {
         case notStarted, paused, notAuthorized
         case started(TimeInterval)
         case timeUpdated(TimeInterval)
+        case interrupted
     }
     
     public enum RecordingError: Error {
@@ -74,14 +78,21 @@ public class RecordingController: NSObject, ObservableObject {
         ]) {
             self.recordingURL = recordingURL
             self.recordingSettings = settings
+            super.init()
+            
+            NotificationCenter
+                .default
+                .publisher(for: AVAudioSession.interruptionNotification)
+                .sink { [weak self] _ in
+                    self?.statePublisher.send(.interrupted)
+                }
+                .store(in: &cancellables)
         }
 }
 
 //MARK: - Public
 public extension RecordingController {
     func startOrResumeRecording() {
-        
-        
         if let isRecording = audioRecorder?.record(),
             isRecording {
             currentPair.start = audioRecorder?.currentTime ?? .infinity
