@@ -78,7 +78,7 @@ struct PlayerControlsView<TimeLineViewModel>: View where TimeLineViewModel: Play
     
     var previousButton: some View {
         Button {
-            viewModel.next()
+            viewModel.previous()
         } label: {
             Image(systemName: "backward.end.fill")
         }

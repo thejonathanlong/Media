@@ -7,7 +7,7 @@ import AVFoundation
 import SwiftUI
 
 public protocol PlayerLayerViewDisplayable: ObservableObject {
-    var player: AVPlayer? { get }
+    var player: AVPlayer { get }
 }
 
 public struct PlayerLayerView<ViewModel>: View where ViewModel: PlayerLayerViewDisplayable {
@@ -62,7 +62,7 @@ public struct PlayerLayerViewRepresentable : UIViewRepresentable {
 
 
 class Preview_PlayerLayerViewModel: PlayerLayerViewDisplayable {
-    var player: AVPlayer? {
+    var player: AVPlayer {
         return AVPlayer(url: URL(string: "https://movietrailers.apple.com/movies/disney/lightyear/lightyear-trailer-1_480p.mov")!)
     }
 }

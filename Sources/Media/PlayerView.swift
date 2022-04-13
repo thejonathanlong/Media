@@ -52,7 +52,7 @@ public struct PlayerView<ViewModel>: View where ViewModel: PlayerViewDisplayable
 }
 
 class Preview_MediaPlayerViewModel: PlayerViewDisplayable {
-    var player: AVPlayer? {
+    var player: AVPlayer {
         return AVPlayer(url: URL(string: "https://movietrailers.apple.com/movies/disney/lightyear/lightyear-trailer-1_480p.mov")!)
     }
     
