@@ -29,7 +29,7 @@ final class SpeechRecognizerTests: XCTestCase {
         let timedString = try XCTUnwrap(timedStringOrNil)
         
         XCTAssertEqual(inputAsset.duration.seconds.rounded(), timedString.duration.rounded())
-        XCTAssertEqual(timedString.formattedString, ["modern", "electro", "acoustics"])
+        XCTAssertEqual(timedString.formattedString.split(separator: " "), ["modern", "electro", "acoustics"])
         XCTAssertEqual(speechRecognizer.state, .completed(timedString))
         
     }
