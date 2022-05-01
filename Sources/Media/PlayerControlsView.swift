@@ -29,11 +29,12 @@ struct PlayerControlsView<TimeLineViewModel>: View where TimeLineViewModel: Play
     
     var snapshots: some View {
         HStack {
-            ForEach(0..<viewModel.images.count) { index in
-                Image(uiImage: viewModel.images[index])
+            ForEach(viewModel.images, id: \.self) { image in
+                Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .onTapGesture {
+                        let index = viewModel.images.firstIndex(of: image) ?? 0
                         viewModel.move(to: index)
                     }
             }
